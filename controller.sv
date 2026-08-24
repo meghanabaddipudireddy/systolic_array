@@ -32,7 +32,7 @@ module controller(
           next_state = DONE;
         end
         else begin
-          next_state = IDLE;
+          next_state = COMPUTE;
         end
       DONE: next_state = IDLE;
 
@@ -40,8 +40,8 @@ module controller(
     endcase
   end
 
-  assign done = DONE;
-  assign mac_en = COMPUTE;
+  assign done = (state == DONE);
+  assign mac_en = (state == COMPUTE);
   
 endmodule
       
