@@ -9,8 +9,6 @@ A parameterized 4x4 output-stationary systolic array for matrix multiplication, 
 
 Matrix multiply is the core operation in neural network inference — every layer is essentially C = A × B. A naive software implementation computes each output element sequentially. A systolic array computes all 16 output elements simultaneously in a pipelined, rhythmic dataflow — each clock cycle, every MAC unit does useful work.
 
-The key insight from Kung & Leiserson (1978): if you can structure computation so data flows through processing elements in a regular, rhythmic pattern (like a heartbeat — "systolic"), you eliminate the memory bandwidth bottleneck that limits naive implementations. Data enters once, flows through the array doing useful work at every step, and exits.
-
 ---
 
 ### Output-Stationary Dataflow
