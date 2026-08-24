@@ -163,8 +163,17 @@ systolic-array/
 │   ├── mac_cell.sv      — MAC unit
 │   ├── controller.sv    — Moore FSM controller
 │   └── top.sv           — array top level with skewing and wiring
-├── tb/
-│   └── systolic_tb.sv   — matrix multiply testbench
+├── uvm_testbench/
+│   └── systolic_agent.sv   
+│   └── systolic_driver.sv
+│   └── systolic_env.sv
+│   └── systolic_monitor_in.sv
+│   └── systolic_monitor_out.sv
+│   └── systolic_scoreboard.sv
+│   └── systolic_sequence.sv
+│   └── systolic_tb.sv
+│   └── systolic_test.sv
+│   └── systolic_transaction.sv   — matrix multiply testbench
 └── README.md
 ```
 
@@ -172,6 +181,6 @@ systolic-array/
 
 ## Planned Additions
 
-- Testbench verifying correct 4x4 matrix multiply output
+- UVM testbench verifying correct 4x4 matrix multiply output
 - BRAM interface for weight storage
 - Post-synthesis PPA analysis: fmax, DSP utilization, power estimate
