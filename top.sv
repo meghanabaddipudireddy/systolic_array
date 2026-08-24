@@ -14,6 +14,19 @@ module top(
   //b_in - mac - mac - mac - mac
   logic [31:0] w_wire [4:0][3:0];
 
+  // controller and counter logic
+  logic mac_en;
+  logic [2:0] count;
+  logic count_done;
+  
+  // skew signals
+  logic [31:0] a_skew [3:0];
+  logic [31:0] a_delay2;
+  logic [31:0] a_delay3a, a_delay3b;
+  logic [31:0] b_skew [3:0];
+  logic [31:0] b_delay2;
+  logic [31:0] b_delay3a, b_delay3b;
+  
   // A matrix inputs to left boundary
   assign x_wire[0][0] = a_skew[0];
   assign x_wire[1][0] = a_skew[1];
@@ -26,10 +39,6 @@ module top(
   assign w_wire[0][2] = b_skew[2];
   assign w_wire[0][3] = b_skew[3];
 
-  // controller and counter logic
-  logic mac_en;
-  logic [2:0] count;
-  logic count_done;
   // count is done is counter at 6
   assign count_done = (count == 3'd6);
 
@@ -74,8 +83,6 @@ module top(
 
   //skewing - needed or else wrong data will meet wrong data at each cell, so increase number of cycles
   //each row is delayed by row index
-  logic [31:0] a_skew [3:0];
-
   //row 0 (no delay)
   assign a_skew[0] = a_in[0];
 
@@ -85,14 +92,12 @@ module top(
   end
 
   //row 2 (2 cycle delay)
-  logic [31:0] a_delay2;
   always_ff @(posedge clk) begin
     a_delay2  <= a_in[2];
     a_skew[2] <= a_delay2;
   end
 
   //row 3 (3 cycle delay)
-  logic [31:0] a_delay3a, a_delay3b;
   always_ff @(posedge clk) begin
     a_delay3a <= a_in[3];
     a_delay3b <= a_delay3a;
@@ -100,8 +105,7 @@ module top(
   end
 
   //each column delayed by column index
-  logic [31:0] b_skew [3:0];
-
+  
   //column 0 (no delay)
   assign b_skew[0] = b_in[0];
 
@@ -111,14 +115,12 @@ module top(
   end
 
   //column 2 (2 cycle delay)
-  logic [31:0] b_delay2;
   always_ff @(posedge clk) begin
     b_delay2  <= b_in[2];
     b_skew[2] <= b_delay2;
   end
 
   //column 3 (3 cycle delay)
-  logic [31:0] b_delay3a, b_delay3b;
   always_ff @(posedge clk) begin
     b_delay3a <= b_in[3];
     b_delay3b <= b_delay3a;
