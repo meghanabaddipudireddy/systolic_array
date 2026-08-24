@@ -11,9 +11,9 @@ module mac_cell (
 
   always_ff @(posedge clk) begin
     if(rst) begin
-      y <= 1'b0;
-      x_out <= 1'b0;
-      w_out <= 1'b0;
+      y <= '0;
+      x_out <= '0;
+      w_out <= '0;
     end
     else if (mac_en) begin
       y <= y + (w_in * x_in);
