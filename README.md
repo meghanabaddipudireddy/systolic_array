@@ -171,7 +171,7 @@ systolic-array/
 │   └── systolic_sequence.sv
 │   └── systolic_tb.sv
 │   └── systolic_test.sv
-│   └── systolic_transaction.sv   — matrix multiply testbench
+│   └── systolic_transaction.sv   
 └── README.md
 ```
 
