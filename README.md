@@ -231,6 +231,7 @@ systolic-array/
 │   └── systolic_scoreboard.sv
 │   └── systolic_sequence.sv
 │   └── systolic_tb.sv
+│   └── systolic_if.sv
 │   └── systolic_test.sv
 │   └── systolic_transaction.sv   
 └── README.md
