@@ -1,4 +1,5 @@
-# systolic_array
+# 4x4 Systolic Array AI Accelerator — SystemVerilog Implementation
+
 A parameterized 4x4 output-stationary systolic array for matrix multiplication, implemented in pure RTL SystemVerilog. Designed as an AI hardware accelerator targeting the same architectural principles used in commercial ML inference chips (Google TPU, MIT Eyeriss).
 
 ---
@@ -155,16 +156,86 @@ The generate loop connects cells automatically:
 
 ---
 
+## Verification — UVM Testbench
+
+The testbench uses the Universal Verification Methodology (UVM) — a standardized, component-based verification framework. Instead of a single monolithic testbench, UVM breaks verification into reusable components each with a specific job. This enables constrained-random testing, automatic result checking, and coverage-driven verification.
+
+### Why UVM over a basic testbench
+
+A directed testbench only checks the specific cases you thought to write. A UVM testbench with constrained-random sequences generates hundreds of random matrix pairs automatically, and the scoreboard checks every single one against a software reference model — covering cases a directed test would never reach.
+
+### UVM Component Structure
+
+```
+systolic_test
+└── systolic_env
+    ├── systolic_agent
+    │   ├── uvm_sequencer       — manages transaction handoff
+    │   ├── systolic_driver     — drives a_in, b_in, start onto DUT
+    │   └── systolic_monitor_in — watches inputs, captures A and B matrices
+    ├── systolic_monitor_out    — watches done and y_out, captures results
+    └── systolic_scoreboard     — computes expected C=A×B, compares to actual
+```
+
+### Component Descriptions
+
+**systolic_transaction** — the data object passed between components. Holds one 4x4 matrix A, one 4x4 matrix B, and the result C. A and B are declared `rand` so UVM can randomize them automatically using constraints that keep values in a safe range (0-15) to prevent accumulator overflow.
+
+**systolic_sequence** — generates a stream of randomized transactions. Calls `randomize()` on each transaction, then hands it to the driver via `start_item` / `finish_item`. Configurable number of transactions — default 20 random matrix multiplies per test run.
+
+**systolic_driver** — receives transactions from the sequence and drives them onto the DUT pins cycle by cycle. Feeds A rows left-to-right and B columns top-to-bottom with proper timing, pulses `start`, then waits for `done` before accepting the next transaction.
+
+**systolic_monitor_in** — watches `a_in`, `b_in`, and `start` on the DUT interface. When `start` pulses, captures the 4x4 input matrices over 4 cycles and sends a transaction to the scoreboard via an analysis port.
+
+**systolic_monitor_out** — watches `done` and `y_out`. When `done` pulses, captures all 16 result values and sends a transaction to the scoreboard.
+
+**systolic_scoreboard** — the verification intelligence. Maintains two queues — one for input transactions, one for output transactions. When both arrive, it computes the expected result C = A × B in software using three nested loops, then compares each of the 16 elements against the actual DUT output. Any mismatch is reported with the exact element index and expected vs actual values. Reports total pass/fail count at the end of simulation.
+
+**systolic_agent** — bundles the driver, sequencer, and input monitor. Exposes the input monitor's analysis port upward to the environment.
+
+**systolic_env** — bundles the agent, output monitor, and scoreboard. Connects analysis ports: input monitor → scoreboard, output monitor → scoreboard.
+
+**systolic_test** — top level. Creates the environment, raises a UVM objection to keep simulation alive, starts the sequence on the agent's sequencer, drops the objection when done.
+
+### How the scoreboard verifies
+
+```
+Input monitor captures A, B → scoreboard queue
+Output monitor captures C   → scoreboard queue
+
+Scoreboard computes expected:
+    for i in 0..3:
+        for j in 0..3:
+            expected[i][j] = sum(A[i][k] * B[k][j] for k in 0..3)
+
+Compares expected[i][j] vs actual C[i][j] for all 16 elements
+Reports pass or fail per element
+```
+
+This reference model works for any valid 4x4 matrix input — no hardcoded expected values, fully automated checking.
+
+---
+
 ## File Structure
 
 ```
 systolic-array/
 ├── src/
-│   ├── mac_cell.sv      — MAC unit
-│   ├── controller.sv    — Moore FSM controller
-│   └── top.sv           — array top level with skewing and wiring
+│   ├── mac_cell.sv               — MAC unit
+│   ├── controller.sv             — Moore FSM controller
+│   └── top.sv                    — array top level with skewing and wiring
 ├── tb/
-│   └── systolic_tb.sv   — matrix multiply testbench
+│   ├── systolic_if.sv            — SystemVerilog interface
+│   ├── systolic_transaction.sv   — UVM transaction class
+│   ├── systolic_sequence.sv      — UVM sequence
+│   ├── systolic_driver.sv        — UVM driver
+│   ├── systolic_monitor_in.sv    — UVM input monitor
+│   ├── systolic_monitor_out.sv   — UVM output monitor
+│   ├── systolic_scoreboard.sv    — UVM scoreboard with reference model
+│   ├── systolic_agent.sv         — UVM agent
+│   ├── systolic_env.sv           — UVM environment
+│   ├── systolic_test.sv          — UVM test
+│   └── systolic_tb.sv            — top level testbench module
 └── README.md
 ```
 
@@ -172,6 +243,5 @@ systolic-array/
 
 ## Planned Additions
 
-- Testbench verifying correct 4x4 matrix multiply output
 - BRAM interface for weight storage
 - Post-synthesis PPA analysis: fmax, DSP utilization, power estimate
