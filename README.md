@@ -240,6 +240,5 @@ systolic-array/
 
 ## Planned Additions
 
-- UVM testbench verifying correct 4x4 matrix multiply output
 - BRAM interface for weight storage
 - Post-synthesis PPA analysis: fmax, DSP utilization, power estimate
