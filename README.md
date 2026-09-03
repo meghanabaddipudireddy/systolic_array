@@ -10,8 +10,6 @@ A parameterized 4x4 output-stationary systolic array for matrix multiplication, 
 
 Matrix multiply is the core operation in neural network inference — every layer is essentially C = A × B. A naive software implementation computes each output element sequentially. A systolic array computes all 16 output elements simultaneously in a pipelined, rhythmic dataflow — each clock cycle, every MAC unit does useful work.
 
-The key insight from Kung & Leiserson (1978): if you can structure computation so data flows through processing elements in a regular, rhythmic pattern (like a heartbeat — "systolic"), you eliminate the memory bandwidth bottleneck that limits naive implementations. Data enters once, flows through the array doing useful work at every step, and exits.
-
 ---
 
 ### Output-Stationary Dataflow
@@ -221,21 +219,20 @@ This reference model works for any valid 4x4 matrix input — no hardcoded expec
 ```
 systolic-array/
 ├── src/
-│   ├── mac_cell.sv               — MAC unit
-│   ├── controller.sv             — Moore FSM controller
-│   └── top.sv                    — array top level with skewing and wiring
-├── tb/
-│   ├── systolic_if.sv            — SystemVerilog interface
-│   ├── systolic_transaction.sv   — UVM transaction class
-│   ├── systolic_sequence.sv      — UVM sequence
-│   ├── systolic_driver.sv        — UVM driver
-│   ├── systolic_monitor_in.sv    — UVM input monitor
-│   ├── systolic_monitor_out.sv   — UVM output monitor
-│   ├── systolic_scoreboard.sv    — UVM scoreboard with reference model
-│   ├── systolic_agent.sv         — UVM agent
-│   ├── systolic_env.sv           — UVM environment
-│   ├── systolic_test.sv          — UVM test
-│   └── systolic_tb.sv            — top level testbench module
+│   ├── mac_cell.sv      — MAC unit
+│   ├── controller.sv    — Moore FSM controller
+│   └── top.sv           — array top level with skewing and wiring
+├── uvm_testbench/
+│   └── systolic_agent.sv   
+│   └── systolic_driver.sv
+│   └── systolic_env.sv
+│   └── systolic_monitor_in.sv
+│   └── systolic_monitor_out.sv
+│   └── systolic_scoreboard.sv
+│   └── systolic_sequence.sv
+│   └── systolic_tb.sv
+│   └── systolic_test.sv
+│   └── systolic_transaction.sv   
 └── README.md
 ```
 
@@ -243,5 +240,6 @@ systolic-array/
 
 ## Planned Additions
 
+- UVM testbench verifying correct 4x4 matrix multiply output
 - BRAM interface for weight storage
 - Post-synthesis PPA analysis: fmax, DSP utilization, power estimate
