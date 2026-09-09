@@ -1,8 +1,10 @@
+import uvm_pkg::*;
+`include "uvm_macros.svh"
+
 class systolic_env extends uvm_env;
 
     `uvm_component_utils(systolic_env)
 
-    // components
     systolic_agent       agent;
     systolic_monitor_out monitor_out;
     systolic_scoreboard  scoreboard;
@@ -19,10 +21,7 @@ class systolic_env extends uvm_env;
     endfunction
 
     function void connect_phase(uvm_phase phase);
-        // connect input monitor to scoreboard
         agent.ap.connect(scoreboard.ap_in);
-
-        // connect output monitor to scoreboard
         monitor_out.ap.connect(scoreboard.ap_out);
     endfunction
 

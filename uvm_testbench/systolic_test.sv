@@ -1,3 +1,6 @@
+import uvm_pkg::*;
+`include "uvm_macros.svh"
+
 class systolic_test extends uvm_test;
 
     `uvm_component_utils(systolic_test)
@@ -16,15 +19,12 @@ class systolic_test extends uvm_test;
     task run_phase(uvm_phase phase);
         systolic_sequence seq;
 
-        // tell UVM simulation shouldn't end yet
         phase.raise_objection(this);
 
-        // create and start the sequence
         seq = systolic_sequence::type_id::create("seq");
-        seq.num_transactions = 20;  // run 20 random matrix multiplies
+        seq.num_transactions = 20;
         seq.start(env.agent.sequencer);
 
-        // small delay then allow simulation to end
         #100;
         phase.drop_objection(this);
     endtask
