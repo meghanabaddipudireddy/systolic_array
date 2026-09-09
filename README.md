@@ -239,7 +239,3 @@ systolic-array/
 
 ---
 
-## Planned Additions
-
-- BRAM interface for weight storage
-- Post-synthesis PPA analysis: fmax, DSP utilization, power estimate
