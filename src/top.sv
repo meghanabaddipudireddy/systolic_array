@@ -16,7 +16,7 @@ module top(
 
   // controller and counter logic
   logic mac_en;
-  logic [2:0] count;
+  logic [3:0] count;
   logic count_done;
   
   // skew signals
@@ -40,16 +40,16 @@ module top(
   assign w_wire[0][3] = b_skew[3];
 
   // count is done is counter at 6
-  assign count_done = (count == 3'd6);
+  assign count_done = (count == 4'd9);
 
   //counter should only run on compute (mac_en signal)
   always_ff @(posedge clk) begin
     if (rst)
-        count <= 3'b0;
+        count <= 4'b0;
     else if (mac_en && !count_done)
         count <= count + 1;
     else if (!mac_en)
-        count <= 3'b0;
+        count <= 4'b0;
   end
 
   //instantiate controller

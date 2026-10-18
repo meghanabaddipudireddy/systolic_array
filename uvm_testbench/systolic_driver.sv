@@ -20,9 +20,14 @@ class systolic_driver extends uvm_driver #(systolic_transaction);
     task run_phase(uvm_phase phase);
         systolic_transaction txn;
 
-        vif.start <= 0;
-        vif.a_in  <= '{default: 0};
-        vif.b_in  <= '{default: 0};
+        vif.rst   = 1;
+        vif.start = 0;
+        vif.a_in  = '{default: 0};
+        vif.b_in  = '{default: 0};
+
+        // The driver owns reset, including startup and each independent multiply.
+        repeat (4) @(negedge vif.clk);
+        vif.rst = 0;
 
         forever begin
             seq_item_port.get_next_item(txn);
@@ -32,33 +37,34 @@ class systolic_driver extends uvm_driver #(systolic_transaction);
     endtask
 
     task drive_transaction(systolic_transaction txn);
-        // load first column of A and first row of B
-        for (int i = 0; i < 4; i++) begin
-            vif.a_in[i] <= txn.A[i][0];
-            vif.b_in[i] <= txn.B[0][i];
-        end
+        // Clear accumulators and flush the unreset skew chains with zeros.
+        // All stimulus changes on falling edges, away from RTL sampling edges.
+        @(negedge vif.clk);
+        vif.rst = 1;
+        vif.start = 0;
+        vif.a_in = '{default: 0};
+        vif.b_in = '{default: 0};
+        repeat (4) @(negedge vif.clk);
+        vif.rst = 0;
+        vif.start = 1;
 
-        // pulse start
-        @(posedge vif.clk);
-        vif.start <= 1;
-        @(posedge vif.clk);
-        vif.start <= 0;
-
-        // feed remaining columns of A and rows of B
-        for (int k = 1; k < 4; k++) begin
-            @(posedge vif.clk);
+        // The next rising edge accepts start; operands stay zero until then.
+        @(negedge vif.clk);
+        vif.start = 0;
+        for (int k = 0; k < 4; k++) begin
             for (int i = 0; i < 4; i++) begin
-                vif.a_in[i] <= txn.A[i][k];
-                vif.b_in[i] <= txn.B[k][i];
+                vif.a_in[i] = txn.A[i][k];
+                vif.b_in[i] = txn.B[k][i];
             end
+            @(negedge vif.clk);
         end
 
-        // wait for done
+        // Supply bubbles while the final products propagate through the array.
+        vif.a_in = '{default: 0};
+        vif.b_in = '{default: 0};
         @(posedge vif.clk iff vif.done);
-
-        vif.start <= 0;
-        vif.a_in  <= '{default: 0};
-        vif.b_in  <= '{default: 0};
+        // Allow the output monitor to capture before another reset can occur.
+        @(negedge vif.clk);
     endtask
 
 endclass

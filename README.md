@@ -1,241 +1,286 @@
-# 4x4 Systolic Array AI Accelerator — SystemVerilog Implementation
+# 4×4 Systolic Array AI Accelerator
 
-A parameterized 4x4 output-stationary systolic array for matrix multiplication, implemented in pure RTL SystemVerilog. Designed as an AI hardware accelerator targeting the same architectural principles used in commercial ML inference chips (Google TPU, MIT Eyeriss).
+## SystemVerilog implementation with UVM verification
 
----
+A 4×4 systolic array for matrix multiplication, implemented in SystemVerilog RTL. The design contains 16 multiply accumulate cells, input delay logic, and a controller that sequences computation. A UVM testbench generates matrix inputs and compares the hardware results against a reference model.
 
-## Architecture
+The accelerator computes:
 
-### Why a Systolic Array
+```text
+C = A × B
 
-Matrix multiply is the core operation in neural network inference — every layer is essentially C = A × B. A naive software implementation computes each output element sequentially. A systolic array computes all 16 output elements simultaneously in a pipelined, rhythmic dataflow — each clock cycle, every MAC unit does useful work.
-
----
-
-### Output-Stationary Dataflow
-
-The array uses **output-stationary** dataflow — each MAC unit holds its partial sum (accumulator) in place and accumulates over multiple cycles while data flows through it.
-
-```
-Each MAC unit computes:
-    y = y + w_in × x_in    (accumulate in place)
-    x_out = x_in            (activation passes right to next cell)
-    w_out = w_in            (weight passes down to next cell)
+C[i][j] = Σ A[i][k] × B[k][j]
+          k = 0 through 3
 ```
 
-Matrix A (activations) flows **horizontally** left to right through each row.
-Matrix B (weights) flows **vertically** top to bottom through each column.
-Matrix C (results) accumulates **in place** at each MAC unit position (i,j).
+Each output element is the dot product of one row of A and one column of B. The complete operation requires 64 multiplications and their associated accumulations. The array distributes this work across 16 cells and reuses operands as they move between neighboring cells.
 
-After the computation completes, MAC unit at position (i,j) holds C[i][j] — the dot product of row i of A with column j of B.
+This README describes the architecture supplied with the project. Timing, reset behavior, and parameter support should be checked against the RTL before integration.
 
----
+## Why use a systolic array?
 
-### Data Skewing
+Matrix multiplication is a central operation in many neural network layers. A systolic array maps its repeated arithmetic onto a regular grid of small processing elements.
 
-Without skewing, all inputs would enter the array simultaneously and the wrong data would meet at each cell. The correct element of A[i][k] must meet B[k][j] at MAC unit (i,j) at exactly the right cycle.
+Instead of independently fetching every operand for every output, a cell forwards each operand to its neighbor. An activation can contribute to multiple outputs as it travels across a row, while a weight can contribute to multiple outputs as it travels down a column.
 
-Since data travels one cell per cycle through the array, row i of A must be delayed by i cycles before entering, and column j of B must be delayed by j cycles:
+The name systolic refers to this rhythmic movement: on each active clock edge, operands advance through the grid and cells update their local results. Cells become active at different times as the array fills, so all 16 cells do not perform useful arithmetic on every cycle.
 
-```
-Cycle:    0    1    2    3    4    5    6
-Row 0:   A00  A01  A02  A03   0    0    0
-Row 1:    0   A10  A11  A12  A13   0    0
-Row 2:    0    0   A20  A21  A22  A23   0
-Row 3:    0    0    0   A30  A31  A32  A33
-```
+## Architecture at a glance
 
-Same staggering applies to B columns. This ensures A[i][k] and B[k][j] always arrive at MAC unit (i,j) simultaneously.
+![Systolic array architecture](images/array.png)
 
-The skewing is implemented as shift register chains at the array input boundaries — row i of A delayed by i flip-flop stages, column j of B delayed by j flip-flop stages.
+The top module connects the input delay chains, processing cells, counter, and controller. Activations enter from the left boundary. Weights enter from the top boundary. Results remain inside the cells until external logic reads the output array.
 
-Total computation time: 4 + 3 = **7 cycles** (4 cycles for all inputs to enter + 3 cycles for the last inputs to propagate to the far corner).
+## Output stationary dataflow
 
----
+Each cell owns one output element throughout a matrix multiplication. Its partial sum stays in a local accumulator while the operands move through the array. This arrangement is called output stationary dataflow.
 
-### 4x4 Array Structure
+![Inside a MAC cell](images/mac.png)
 
-```
-         b_in[0]  b_in[1]  b_in[2]  b_in[3]
-            ↓        ↓        ↓        ↓
-a_in[0] → MAC(0,0) → MAC(0,1) → MAC(0,2) → MAC(0,3)
-            ↓        ↓        ↓        ↓
-a_in[1] → MAC(1,0) → MAC(1,1) → MAC(1,2) → MAC(1,3)
-            ↓        ↓        ↓        ↓
-a_in[2] → MAC(2,0) → MAC(2,1) → MAC(2,2) → MAC(2,3)
-            ↓        ↓        ↓        ↓
-a_in[3] → MAC(3,0) → MAC(3,1) → MAC(3,2) → MAC(3,3)
+Conceptually, each enabled cell performs:
+
+```systemverilog
+y     <= y + (w_in * x_in);
+x_out <= x_in;
+w_out <= w_in;
 ```
 
-Activations (A) enter from the left, weights (B) enter from the top. Each arrow represents a registered wire — data moves exactly one cell per clock cycle. The 16 accumulated results are read from each MAC unit's output after `done` asserts.
+The RTL determines whether forwarding is enabled independently or together with accumulation. The controller and driver must use a timing convention consistent with that behavior.
 
----
+At cell `(i,j)`, the four useful operand pairs are:
 
-## Module Hierarchy
-
+```text
+A[i][0] × B[0][j]
+A[i][1] × B[1][j]
+A[i][2] × B[2][j]
+A[i][3] × B[3][j]
+          ↓
+        C[i][j]
 ```
-top
-├── controller        — Moore FSM sequencing computation
-├── mac_cell × 16    — instantiated via generate loop in 4x4 grid
-└── skewing logic    — shift register chains at input boundaries
+
+For example, cell `(1,2)` computes:
+
+```text
+C[1][2] = A[1][0] × B[0][2]
+        + A[1][1] × B[1][2]
+        + A[1][2] × B[2][2]
+        + A[1][3] × B[3][2]
 ```
 
----
+## The 4×4 compute grid
 
-## Module Descriptions
+
+
+Horizontal arrows carry A values. Vertical arrows carry B values. Each registered hop takes one clock cycle. The cell coordinates also identify the position of its result in matrix C.
+
+## Input skewing and operand alignment
+
+![Input skewing delay chains](images/skewing.png)
+
+Operands must arrive together at the cell that multiplies them. Because cell `(i,j)` lies `j` horizontal hops from the left edge and `i` vertical hops from the top edge, the boundary streams need different delays.
+
+1. Delay row `i` of A by `i` cycles.
+2. Delay column `j` of B by `j` cycles.
+3. Supply zeros in unused stream positions while the array fills and drains.
+
+These delays ensure that `A[i][k]` and `B[k][j]` meet at cell `(i,j)` in arithmetic slot `k + i + j`.
+
+Row 0 and column 0 enter directly. Row 1 and column 1 pass through one delay register. Row 2 and column 2 pass through two registers. Row 3 and column 3 pass through three registers.
+
+The A streams at the array boundary are:
+
+```text
+Arithmetic slot   0    1    2    3    4    5    6
+
+Row 0            A00  A01  A02  A03   0    0    0
+Row 1             0   A10  A11  A12  A13   0    0
+Row 2             0    0   A20  A21  A22  A23   0
+Row 3             0    0    0   A30  A31  A32  A33
+```
+
+The corresponding B streams are:
+
+```text
+Arithmetic slot   0    1    2    3    4    5    6
+
+Column 0         B00  B10  B20  B30   0    0    0
+Column 1          0   B01  B11  B21  B31   0    0
+Column 2          0    0   B02  B12  B22  B32   0
+Column 3          0    0    0   B03  B13  B23  B33
+```
+
+If the top module provides these delays internally, the driver supplies the original matrix streams without adding the same delays again.
+
+## Computation timing
+
+Seven slots are sufficient to present all skewed operands at the array boundaries. The final operands still need time to reach the bottom right cell.
+
+For the described registered dataflow, the last useful operation occurs at:
+
+```text
+Last slot = last k + last row + last column
+          = 3 + 3 + 3
+          = 9
+
+Total arithmetic slots = 10
+```
+
+The first and last useful arithmetic slots for each cell are:
+
+```text
+                   Column 0   Column 1   Column 2   Column 3
+
+Row 0                0…3        1…4        2…5        3…6
+Row 1                1…4        2…5        3…6        4…7
+Row 2                2…5        3…6        4…7        5…8
+Row 3                3…6        4…7        5…8        6…9
+```
+
+For an `N × N` array multiplying two square matrices of the same size, this schedule uses `3N − 2` arithmetic slots. Interface sampling, initial input registers, and controller transitions can add latency around those slots.
+
+A controller that ends computation when a counter reaches 6 therefore needs review against the actual RTL. Under the schedule above, it would stop before the final cells finish. `done` must indicate that every result is valid.
+
+## RTL module responsibilities
 
 ### mac_cell
 
-The fundamental compute unit. Every clock cycle when enabled:
+The processing element multiplies its two operands, adds the product to its accumulator, and forwards operands to neighboring cells. Sixteen instances form the grid.
 
-```systemverilog
-y     <= y + (w_in * x_in);   // multiply-accumulate
-x_out <= x_in;                 // pass activation to next cell right
-w_out <= w_in;                 // pass weight to next cell below
-```
+The described interface uses 32 bit operands and a 64 bit accumulator. A full precision 32 bit multiplication fits in 64 bits, but a sum of four full range products can require 66 bits. A 64 bit accumulator therefore requires bounded inputs or an explicitly defined overflow policy.
 
-Inputs are 32-bit. The accumulator `y` is 64-bit to hold the full precision result without overflow (32-bit × 32-bit = 64-bit, accumulated 4 times).
-
-The `mac_en` signal gates accumulation — the MAC only computes when the controller is in the COMPUTE state, preventing spurious accumulation during IDLE or after DONE.
-
----
+Operand signedness and expression sizing also need to be consistent between the RTL and reference model.
 
 ### controller
 
-A 3-state Moore FSM that sequences the computation:
+![Controller FSM](images/controller.png)
 
+A three state Moore FSM sequences a transaction. Its control outputs depend on the current state.
+
+The controller waits in IDLE until `start` is asserted, enters COMPUTE, moves to DONE after `count_done`, then returns to IDLE on the following cycle.
+
+```text
+State       done       mac_en       Purpose
+
+IDLE          0           0         Wait for a new request
+COMPUTE       0           1         Advance the computation
+DONE          1           0         Announce valid results
 ```
-IDLE    → outputs: done=0, mac_en=0
-          transition: start=1 → COMPUTE
 
-COMPUTE → outputs: done=0, mac_en=1
-          transition: count==6 → DONE, else stay + count++
-
-DONE    → outputs: done=1, mac_en=0
-          transition: always → IDLE
-```
-
-**Why Moore:** outputs (`done`, `mac_en`) depend only on the current state, not on input signals. This guarantees glitch-free outputs — `done` asserts cleanly for exactly one cycle when the state register transitions to DONE, not combinationally from a counter comparison.
-
-A 3-bit counter in the top module counts cycles during COMPUTE and asserts `count_done` when it reaches 6. The controller transitions to DONE on that signal.
-
-DONE lasts exactly one cycle — long enough for downstream logic to latch results — then returns to IDLE ready for the next matrix multiply.
-
----
+The intended DONE state lasts one cycle before returning to IDLE. External logic should capture results when `done` is asserted. Moore decoding makes outputs depend only on state; whether an output is explicitly registered depends on the implementation.
 
 ### top
 
-Wires everything together:
+The top module builds the datapath and connects control signals.
 
-- Declares `x_wire[4][5]` — horizontal wires carrying activations between columns
-- Declares `w_wire[5][4]` — vertical wires carrying weights between rows
-- Implements skewing shift registers for A rows and B columns
-- Connects skewed inputs to array boundary (`x_wire[i][0]`, `w_wire[0][j]`)
-- Instantiates 16 MAC cells via nested generate loops
-- Instantiates controller and connects `mac_en`, `done`, `count_done`
+The top module contains the controller, computation counter, two sets of input delay chains, and the grid of 16 MAC cells.
 
-The generate loop connects cells automatically:
-- `x_wire[i][j]` → `mac[i][j].x_in`, `mac[i][j].x_out` → `x_wire[i][j+1]`
-- `w_wire[i][j]` → `mac[i][j].w_in`, `mac[i][j].w_out` → `w_wire[i+1][j]`
+The horizontal operand network has dimensions `x_wire[4][5]`. The vertical network has dimensions `w_wire[5][4]`. The extra boundary position allows every cell to connect to an input and an output.
 
----
-
-## Key Design Decisions
-
-**Output-stationary over weight-stationary:** output-stationary keeps partial sums in the MAC unit accumulators, minimizing memory traffic for the output matrix. Weight-stationary would require loading weights every computation cycle. For inference workloads where the same weights are reused across many input vectors, weight-stationary has advantages — but output-stationary is simpler to implement correctly and sufficient for demonstrating the architecture.
-
-**64-bit accumulator:** 32-bit × 32-bit multiplication produces a 64-bit result. Accumulating 4 such products can grow further. Using a 64-bit accumulator prevents overflow at the cost of wider wires and slightly more area. In a production design you'd choose accumulator width based on the value range of your data.
-
-**Moore FSM for controller:** a Mealy FSM would allow `done` to fire one cycle earlier by making it combinationally dependent on the counter. However `done` is read by external logic and a combinational glitch on the counter could cause false `done` assertions. The Moore FSM adds one cycle of latency in exchange for a clean, registered output — the right tradeoff for a control signal.
-
-**Skewing in top module, not controller:** the skewing logic is purely structural — shift registers with fixed depths. Putting it in the top module keeps the controller FSM clean and focused on sequencing. The skewing doesn't need to know about FSM states; it just delays signals by a fixed number of cycles unconditionally.
-
-**Generate loop for MAC instantiation:** 16 MAC cells instantiated via a nested generate loop rather than explicitly. This makes the design trivially parameterizable — changing the array size would only require changing the loop bounds and wire dimensions, not rewriting 16 instantiations.
-
----
-
-## Verification — UVM Testbench
-
-The testbench uses the Universal Verification Methodology (UVM) — a standardized, component-based verification framework. Instead of a single monolithic testbench, UVM breaks verification into reusable components each with a specific job. This enables constrained-random testing, automatic result checking, and coverage-driven verification.
-
-### Why UVM over a basic testbench
-
-A directed testbench only checks the specific cases you thought to write. A UVM testbench with constrained-random sequences generates hundreds of random matrix pairs automatically, and the scoreboard checks every single one against a software reference model — covering cases a directed test would never reach.
-
-### UVM Component Structure
-
-```
-systolic_test
-└── systolic_env
-    ├── systolic_agent
-    │   ├── uvm_sequencer       — manages transaction handoff
-    │   ├── systolic_driver     — drives a_in, b_in, start onto DUT
-    │   └── systolic_monitor_in — watches inputs, captures A and B matrices
-    ├── systolic_monitor_out    — watches done and y_out, captures results
-    └── systolic_scoreboard     — computes expected C=A×B, compares to actual
+```text
+x_wire[i][j] → Cell(i,j) → x_wire[i][j+1]
+w_wire[i][j] → Cell(i,j) → w_wire[i+1][j]
 ```
 
-### Component Descriptions
+Nested generate loops express the repeated connections. Scaling the design also requires compatible array dimensions, delay depths, counter widths, completion timing, and verification logic.
 
-**systolic_transaction** — the data object passed between components. Holds one 4x4 matrix A, one 4x4 matrix B, and the result C. A and B are declared `rand` so UVM can randomize them automatically using constraints that keep values in a safe range (0-15) to prevent accumulator overflow.
+## Transaction lifecycle
 
-**systolic_sequence** — generates a stream of randomized transactions. Calls `randomize()` on each transaction, then hands it to the driver via `start_item` / `finish_item`. Configurable number of transactions — default 20 random matrix multiplies per test run.
+The transaction proceeds through initialization, start acceptance, operand streaming, array draining, completion, and result capture before the next operation.
 
-**systolic_driver** — receives transactions from the sequence and drives them onto the DUT pins cycle by cycle. Feeds A rows left-to-right and B columns top-to-bottom with proper timing, pulses `start`, then waits for `done` before accepting the next transaction.
+Each transaction must begin with cleared accumulators and known delay contents. Otherwise, a later matrix multiplication can include results or operands from an earlier transaction. The exact reset or clear mechanism is defined by the RTL.
 
-**systolic_monitor_in** — watches `a_in`, `b_in`, and `start` on the DUT interface. When `start` pulses, captures the 4x4 input matrices over 4 cycles and sends a transaction to the scoreboard via an analysis port.
+## Design choices
 
-**systolic_monitor_out** — watches `done` and `y_out`. When `done` pulses, captures all 16 result values and sends a transaction to the scoreboard.
+### Local result accumulation
 
-**systolic_scoreboard** — the verification intelligence. Maintains two queues — one for input transactions, one for output transactions. When both arrive, it computes the expected result C = A × B in software using three nested loops, then compares each of the 16 elements against the actual DUT output. Any mismatch is reported with the exact element index and expected vs actual values. Reports total pass/fail count at the end of simulation.
+Output stationary dataflow keeps partial sums close to the arithmetic that updates them. This avoids moving a partial result between cells after each multiplication. Other dataflows, including weight stationary designs, choose different reuse patterns based on the workload and memory system.
 
-**systolic_agent** — bundles the driver, sequencer, and input monitor. Exposes the input monitor's analysis port upward to the environment.
+### Separate datapath and sequencing
 
-**systolic_env** — bundles the agent, output monitor, and scoreboard. Connects analysis ports: input monitor → scoreboard, output monitor → scoreboard.
+The compute grid and delay chains express operand movement. The controller expresses when a transaction is active and when results are ready. Keeping these responsibilities separate makes timing and control easier to inspect.
 
-**systolic_test** — top level. Creates the environment, raises a UVM objection to keep simulation alive, starts the sequence on the agent's sequencer, drops the objection when done.
+### Repeated structure through generate loops
 
-### How the scoreboard verifies
+A nested generate loop captures the regular layout of the array and avoids manually wiring every instance. This provides a useful foundation for parameterization, although complete size independence requires more than changing loop bounds.
 
-```
-Input monitor captures A, B → scoreboard queue
-Output monitor captures C   → scoreboard queue
+## UVM verification architecture
 
-Scoreboard computes expected:
-    for i in 0..3:
-        for j in 0..3:
-            expected[i][j] = sum(A[i][k] * B[k][j] for k in 0..3)
+The testbench represents a matrix multiplication as a transaction containing A, B, and C. A sequence creates inputs, a driver converts them into signal activity, monitors observe the interface, and a scoreboard checks the observed result.
 
-Compares expected[i][j] vs actual C[i][j] for all 16 elements
-Reports pass or fail per element
-```
+![UVM verification flow](images/verification.png)
 
-This reference model works for any valid 4x4 matrix input — no hardcoded expected values, fully automated checking.
+### Verification components
 
----
+1. **systolic_transaction** holds the input and result matrices. The described random constraints limit input values to 0 through 15.
+2. **systolic_sequence** creates randomized transactions. The documented default is 20 matrix multiplications per run.
+3. **systolic_driver** presents the matrix streams, pulses `start`, and waits for completion before beginning another transaction.
+4. **systolic_monitor_in** observes `start` and the input streams, reconstructs A and B, and publishes them to the scoreboard.
+5. **systolic_monitor_out** captures all 16 results when `done` is observed.
+6. **systolic_scoreboard** pairs observed inputs with outputs and compares each output element with the reference calculation.
+7. **systolic_agent** groups the sequencer, driver, and input monitor.
+8. **systolic_env** creates the agent, output monitor, and scoreboard and connects their analysis ports.
+9. **systolic_test** creates the environment, runs the sequence, and manages the simulation objection.
 
-## File Structure
+### Reference model
 
-```
-systolic-array/
-├── src/
-│   ├── mac_cell.sv      — MAC unit
-│   ├── controller.sv    — Moore FSM controller
-│   └── top.sv           — array top level with skewing and wiring
-├── uvm_testbench/
-│   └── systolic_agent.sv   
-│   └── systolic_driver.sv
-│   └── systolic_env.sv
-│   └── systolic_monitor_in.sv
-│   └── systolic_monitor_out.sv
-│   └── systolic_scoreboard.sv
-│   └── systolic_sequence.sv
-│   └── systolic_tb.sv
-│   └── systolic_if.sv
-│   └── systolic_test.sv
-│   └── systolic_transaction.sv   
-└── README.md
+The scoreboard independently computes the mathematical matrix product:
+
+```text
+For each row i:
+    For each column j:
+        expected[i][j] = 0
+        For each shared index k:
+            expected[i][j] += A[i][k] × B[k][j]
+
+Compare all 16 expected values with the captured DUT outputs.
 ```
 
----
+With values limited to 0 through 15, the largest output element is `4 × 15 × 15 = 900`. These inputs are useful for checking arithmetic and operand routing, but do not exercise full width arithmetic or overflow behavior.
 
+Independent input observation helps the scoreboard check what was actually driven. Pairing input and output queues in order assumes transactions complete in order and that monitors capture exactly one record per operation.
+
+### Useful verification scenarios
+
+1. Zero matrices verify initialization and the absence of stale partial sums.
+2. Identity matrices verify operand placement and result indexing.
+3. A single nonzero element helps isolate a routing or alignment error.
+4. Distinct values in each row and column help reveal transposed operands.
+5. Consecutive transactions verify clearing between operations.
+6. Reset during an operation checks recovery behavior.
+7. Maximum supported values check width and overflow assumptions.
+8. Completion timing checks that `done` follows the final accumulation.
+
+These are suggested scenarios. Test results and coverage should be reported from actual simulation runs.
+
+## Source organization
+
+```text
+Project root
+  ├─ src/
+  │   ├─ mac_cell.sv
+  │   ├─ controller.sv
+  │   └─ top.sv
+  ├─ uvm_testbench/
+  │   ├─ systolic_agent.sv
+  │   ├─ systolic_driver.sv
+  │   ├─ systolic_env.sv
+  │   ├─ systolic_monitor_in.sv
+  │   ├─ systolic_monitor_out.sv
+  │   ├─ systolic_scoreboard.sv
+  │   ├─ systolic_sequence.sv
+  │   ├─ systolic_tb.sv
+  │   ├─ systolic_if.sv
+  │   ├─ systolic_test.sv
+  │   └─ systolic_transaction.sv
+  └─ README.md
+```
+
+## Simulation workflow
+
+1. Use a simulator with SystemVerilog and UVM support.
+2. Compile the RTL, interface, verification classes, and testbench in dependency order.
+3. Select `systolic_tb` as the simulation top and `systolic_test` as the UVM test.
+4. Run the test and inspect scoreboard comparisons and UVM errors.
+5. Inspect waveforms for input alignment, accumulator clearing, and completion timing.
+
+Exact commands depend on the simulator and build files in the repository. This README does not claim measured frequency, area, power, coverage, or passing simulation results without corresponding reports.

@@ -23,16 +23,17 @@ class systolic_monitor_in extends uvm_monitor;
         systolic_transaction txn;
 
         forever begin
-            @(posedge vif.clk iff vif.start);
+            @(posedge vif.clk iff (vif.start && !vif.rst));
 
             txn = systolic_transaction::type_id::create("txn");
 
+            // First operands are sampled one cycle after start is accepted.
             for (int k = 0; k < 4; k++) begin
+                @(posedge vif.clk);
                 for (int i = 0; i < 4; i++) begin
                     txn.A[i][k] = vif.a_in[i];
                     txn.B[k][i] = vif.b_in[i];
                 end
-                @(posedge vif.clk);
             end
 
             ap.write(txn);

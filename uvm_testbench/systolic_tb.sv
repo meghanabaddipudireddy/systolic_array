@@ -1,9 +1,11 @@
+`timescale 1ns/1ps
 import uvm_pkg::*;
 `include "uvm_macros.svh"
 
 module systolic_tb;
 
     import uvm_pkg::*;
+    import systolic_pkg::*;
     `include "uvm_macros.svh"
 
     logic clk;
@@ -22,14 +24,14 @@ module systolic_tb;
         .y_out (vif.y_out)
     );
 
+    // The UVM driver owns reset and holds it across clock edges.
     initial begin
         uvm_config_db #(virtual systolic_if)::set(null, "uvm_test_top.*", "vif", vif);
-
-        vif.rst = 1;
-        #20;
-        vif.rst = 0;
-
         run_test("systolic_test");
     end
 
+    initial begin
+        #100000;
+        $fatal(1, "UVM simulation timed out");
+    end
 endmodule
