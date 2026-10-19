@@ -255,26 +255,39 @@ These are suggested scenarios. Test results and coverage should be reported from
 ## Source organization
 
 ```text
-Project root
+systolic_array/
+  ├─ images/
+  │   ├─ array.png
+  │   ├─ controller.png
+  │   ├─ mac.png
+  │   ├─ skewing.png
+  │   └─ verification.png
   ├─ src/
-  │   ├─ mac_cell.sv
   │   ├─ controller.sv
+  │   ├─ mac_cell.sv
   │   └─ top.sv
+  ├─ tests/
+  │   ├─ run_uvm.sh
+  │   ├─ run.sh
+  │   └─ systolic_tb.sv
   ├─ uvm_testbench/
+  │   ├─ files.f
+  │   ├─ README.md
   │   ├─ systolic_agent.sv
   │   ├─ systolic_driver.sv
   │   ├─ systolic_env.sv
+  │   ├─ systolic_if.sv
   │   ├─ systolic_monitor_in.sv
   │   ├─ systolic_monitor_out.sv
+  │   ├─ systolic_pkg.sv
   │   ├─ systolic_scoreboard.sv
   │   ├─ systolic_sequence.sv
+  │   ├─ systolic_smoke_test.sv
   │   ├─ systolic_tb.sv
-  │   ├─ systolic_if.sv
   │   ├─ systolic_test.sv
   │   └─ systolic_transaction.sv
   └─ README.md
 ```
-
 ## Simulation workflow
 
 1. Use a simulator with SystemVerilog and UVM support.
