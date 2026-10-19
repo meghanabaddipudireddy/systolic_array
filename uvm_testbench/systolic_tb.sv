@@ -27,10 +27,7 @@ module systolic_tb;
     initial begin
         uvm_config_db #(virtual systolic_if)::set(null, "uvm_test_top.*", "vif", vif);
 
-        vif.rst = 1;
-        #20
-        vif.rst = 0;
-
+        // UVM must start at time zero; the driver owns startup reset.
         run_test("systolic_test");
     end
 

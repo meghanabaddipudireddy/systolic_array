@@ -39,5 +39,5 @@ verilator --binary --timing -j 4 -Wno-fatal --top-module systolic_tb \
   }
 echo "Running $mode test with seed $seed"
 "$build_dir/Vsystolic_tb" "+UVM_TESTNAME=$test_name" "+verilator+seed+$seed" 2>&1 | tee "$build_dir/run.log"
-rg -q "$expected" "$build_dir/run.log"
-if rg -q '(UVM_ERROR|UVM_FATAL).* @' "$build_dir/run.log"; then exit 1; fi
+grep -Fq "$expected" "$build_dir/run.log"
+if grep -Eq '(UVM_ERROR|UVM_FATAL).* @' "$build_dir/run.log"; then exit 1; fi
