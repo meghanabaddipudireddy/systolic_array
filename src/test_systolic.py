@@ -1,4 +1,4 @@
-"""Run ten 4x4 matrix cases: python src/test_systolic.py (cocotb 2.x + Verilator)."""
+
 
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -25,7 +25,6 @@ ONES = [[1] * SIZE for _ in range(SIZE)]
 
 
 def matrix_product(a, b):
-    """Independent mathematical reference using Python integer arithmetic."""
     return [[sum(a[i][k] * b[k][j] for k in range(SIZE))
              for j in range(SIZE)] for i in range(SIZE)]
 
