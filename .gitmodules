@@ -1,3 +1,7 @@
 [submodule "livehd"]
 	path = livehd
 	url = /Users/meghanareddy/research/livehd
+[submodule "openram"]
+	path = openram
+	url = https://github.com/VLSIDA/OpenRAM.git
+	branch = stable

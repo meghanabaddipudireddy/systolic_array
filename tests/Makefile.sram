@@ -1,0 +1,44 @@
+.DEFAULT_GOAL := sim
+ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/..)
+LHD ?= $(ROOT)/../livehd/bazel-bin/lhd/lhd
+SIM := verilator
+TOPLEVEL_LANG := verilog
+TOPLEVEL := sram_top
+COCOTB_TEST_MODULES := test_sram_pyrope
+# Override with the Verilog model from a full OpenRAM generation, if available.
+SRAM_MODEL ?= $(ROOT)/generated/openram/sram_128x16.v
+# Do not compile LiveHD's empty imported-macro declaration as a memory model.
+VERILOG_SOURCES := $(ROOT)/generated/sram/sram_top.sram_top.v $(ROOT)/generated/sram/top.top.v $(SRAM_MODEL)
+COMPILE_ARGS += --timing
+SIM_BUILD ?= $(ROOT)/generated/sram_sim_build
+COCOTB_RESULTS_FILE := $(ROOT)/generated/sram_results.xml
+COCOTB_HDL_TIMEUNIT := 1ns
+COCOTB_HDL_TIMEPRECISION := 1ps
+export PYTHONPATH := $(ROOT)/tests:$(PYTHONPATH)
+export PYTHONDONTWRITEBYTECODE := 1
+
+$(ROOT)/generated/openram/model.stamp: $(ROOT)/openram_config/generate_model.py $(ROOT)/openram_config/sram_128x16.py $(ROOT)/openram/compiler/base/verilog.py
+	python $(ROOT)/openram_config/generate_model.py
+	touch $@
+
+$(ROOT)/generated/openram/lg.stamp: $(ROOT)/generated/openram/model.stamp $(LHD)
+	$(LHD) compile $(ROOT)/generated/openram/sram_128x16_ports.v --top sram_128x16 --emit-dir lg:$(ROOT)/generated/openram/lg --workdir $(ROOT)/generated/openram/import-work
+	touch $@
+
+$(ROOT)/generated/sram/core.stamp: $(ROOT)/src_pyrope/top.prp $(LHD)
+	$(LHD) compile $< --emit-dir lg:$(ROOT)/generated/sram/core-lg --workdir $(ROOT)/generated/sram/core-work
+	touch $@
+
+$(ROOT)/generated/sram/sram_top.sram_top.v: $(ROOT)/src_pyrope/sram_top.prp $(LHD) $(ROOT)/generated/openram/lg.stamp $(ROOT)/generated/sram/core.stamp
+	$(LHD) compile $< lg:$(ROOT)/generated/sram/core-lg lg:$(ROOT)/generated/openram/lg --top sram_top.sram_top --emit-dir verilog:$(ROOT)/generated/sram --workdir $(ROOT)/generated/sram/link-work
+
+$(ROOT)/generated/sram/top.top.v: $(ROOT)/generated/sram/sram_top.sram_top.v
+	test -f $@
+
+$(ROOT)/generated/openram/sram_128x16.v: $(ROOT)/generated/openram/model.stamp
+	test -f $@
+
+.PHONY: compile
+compile: $(ROOT)/generated/sram/sram_top.sram_top.v $(ROOT)/generated/openram/sram_128x16.v
+
+include $(shell cocotb-config --makefiles)/Makefile.sim
